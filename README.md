@@ -21,12 +21,12 @@ Following conventions in the literature, we call an activity ***verb*** and an e
 We provide instructions for environment setup.
 ```bash
 # Clone this repository and navigate into the repository
-git clone https://github.com/jhcho99/CoFormer.git    
-cd CoFormer                                          
+git clone https://github.com/PYL2077/My-GSR-Model.git
+cd GSRFormer
 
 # Create a conda environment, activate the environment and install PyTorch via conda
-conda create --name CoFormer python=3.9              
-conda activate CoFormer                             
+conda create --name GSRFormer python=3.9              
+conda activate GSRFormer
 conda install pytorch==1.8.0 torchvision==0.9.0 cudatoolkit=11.1 -c pytorch -c conda-forge 
 
 # Install requirements via pip
