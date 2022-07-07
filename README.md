@@ -1,22 +1,5 @@
 Based on https://github.com/jhcho99/CoFormer
 
-# [CVPR'22] Collaborative Transformers for Grounded Situation Recognition
-[Paper](https://arxiv.org/abs/2203.16518) | [Model Checkpoint](https://drive.google.com/u/1/uc?id=1EoJ081eEcfp0u-B1qkkA_EX8U3Ko8P3u&export=download&confirm=t) 
-
-- This is the official PyTorch implementation of [Collaborative Transformers for Grounded Situation Recognition](https://arxiv.org/abs/2203.16518). 
-- **CoFormer** (**Co**llaborative Glance-Gaze Trans**Former**) achieves state-of-the-art accuracy in every evaluation metric on the SWiG dataset.
-- This repository contains instructions, code and model checkpoint.
-
-![prediction_results](https://user-images.githubusercontent.com/55849968/160762073-9a458795-03c1-4b2a-8945-2187b5a48aca.png)
-
----
-
-## Overview
-Grounded situation recognition is the task of predicting the main activity, entities playing certain roles within the activity, and bounding-box groundings of the entities in the given image. To effectively deal with this challenging task, we introduce a novel approach where the two processes for activity classification and entity estimation are interactive and complementary. To implement this idea, we propose **Co**llaborative Glance-Gaze Trans**Former** (CoFormer) that consists of two modules: Glance transformer for activity classification and Gaze transformer for entity estimation. Glance transformer predicts the main activity with the help of Gaze transformer that analyzes entities and their relations, while Gaze transformer estimates the grounded entities by focusing only on the entities relevant to the activity predicted by Glance transformer. Our CoFormer achieves the state of the art in all evaluation metrics on the SWiG dataset.
-
-![overall_architecture](https://user-images.githubusercontent.com/55849968/160762199-def33a41-b333-41c8-b367-7b6c814b987c.png)
-Following conventions in the literature, we call an activity ***verb*** and an entity ***noun***. Glance transformer predicts a verb with the help of Gaze-Step1 transformer that analyzes nouns and their relations by leveraging role features, while Gaze-Step2 transformer estimates the grounded nouns for the roles associated with the predicted verb. Prediction results are obtained by feed forward networks (FFNs). 
-
 ## Environment Setup
 We provide instructions for environment setup.
 ```bash
