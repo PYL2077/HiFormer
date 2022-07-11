@@ -1,5 +1,7 @@
 Based on https://github.com/jhcho99/CoFormer
 
+目前只改了 `models/transformer.py`
+
 ## Environment Setup
 We provide instructions for environment setup.
 ```bash
