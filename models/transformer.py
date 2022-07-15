@@ -7,13 +7,13 @@ import torch
 from torch import nn, Tensor
 class Encoder(nn.Module):
     def __init__(self, dim_model=512, nhead=8,
-                 num_enc_layers=6, dim_ffn=2048):
+                 num_enc_layers=6, dim_feedforward=2048):
         self.dim_model = dim_model
         self.nhead = nhead
         self.num_verb_classes = 504
         # Encoder
-        layer_A = EncoderLayer_A(dim_model, nhead, dim_ffn=dim_ffn)
-        layer_B = EncoderLayer_B(dim_model, nhead, dim_ffn=dim_ffn)
+        layer_A = EncoderLayer_A(dim_model, nhead, dim_feedforward=dim_feedforward)
+        layer_B = EncoderLayer_B(dim_model, nhead, dim_feedforward=dim_feedforward)
         enc_A = Encoder_A(layer_A, num_enc_layers)
         enc_B = Encoder_B(layer_B, num_enc_layers)
         
@@ -22,7 +22,7 @@ class Encoder(nn.Module):
                                              nn.ReLU(),
                                              nn.Dropout(0.3),
                                              nn.Linear(dim_model*2, self.num_verb_classes))
-        self.ln1 = nn.LayerNorm(dim_model*2)
+        self.norm1 = nn.LayerNorm(dim_model*2)
         self._reset_parameter()
     def _reset_parameter(self):
         for p in self.parameters():
@@ -50,12 +50,12 @@ class Encoder(nn.Module):
 
 class Transformer(nn.Module):
     def __init__(self, dim_model=512, nhead=8,
-                 num_enc_layers=6, num_dec_layers=5, dim_ffn=2048):
+                 num_enc_layers=6, num_dec_layers=5, dim_feedforward=2048):
         self.dim_model = dim_model
         self.nhead = nhead
         self.num_verb_classes = 504
         # Encoder
-        enc_layer = TransformerEncoderLayer(dim_model, nhead, dim_ffn=dim_ffn)
+        enc_layer = TransformerEncoderLayer(dim_model, nhead, dim_feedforward=dim_feedforward)
         self.enc_1 = TransformerEncoder(enc_layer, num_enc_layers)
         self.enc_2 = TransformerEncoder(enc_layer, num_enc_layers)
         # Decoder
@@ -65,7 +65,7 @@ class Transformer(nn.Module):
                                              nn.ReLU(),
                                              nn.Dropout(0.3),
                                              nn.Linear(dim_model*2, self.num_verb_classes))
-        self.ln1 = nn.LayerNorm(dim_model*2)
+        self.norm1 = nn.LayerNorm(dim_model*2)
         self._reset_parameter()
         
     def _reset_parameter(self):
@@ -92,7 +92,7 @@ class Transformer(nn.Module):
         src = torch.cat((verb_ft, img_ft), dim=0)
         verb_ft, img_ft = self.enc_1(src, src_key_padding_mask=mask, pos=pos_embed).split(1)
         # verb classifier
-        role_embed = verb_classifier(verb_ft)
+        role_embed = self.verb_classifier(verb_ft)
         # Encoder 2
 
         # Decoder
@@ -122,61 +122,63 @@ class Encoder_B(nn.Module):
             src = layer(src, memory)
         return src
 class EncoderLayer_A(nn.Module):
-    def __init__(self, dim_model, nhead, dim_ffn=2048, dropout=0.15, activation="relu"):
+    def __init__(self, dim_model, nhead, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
-        self.mha = nn.MultiheadAttention(dim_model, nhead, dropout=dropout, batch_first=True)
-        self.ln1 = nn.LayerNorm(dim_model)
-        self.ln2 = nn.LayerNorm(dim_model)
-        self.ln3 = nn.LayerNorm(dim_model)
+        self.mha = nn.MultiheadAttention(dim_model, nhead, dropout=dropout)
+        self.norm1 = nn.LayerNorm(dim_model)
+        self.norm2 = nn.LayerNorm(dim_model)
+        self.norm3 = nn.LayerNorm(dim_model)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
         # self.ffn = MLP(dim_model)
-        self.ffn = nn.Sequential(nn.Linear(dim_model, dim_ffn),
+        # self.activation = _get_activation(activation)
+        self.ffn = nn.Sequential(nn.Linear(dim_model, dim_feedforward),
                                  _get_activation(activation),
                                  nn.Dropout(dropout),
-                                 nn.Linear(dim_ffn, dim_model))
-        self.activation = _get_activation(activation)
+                                 nn.Linear(dim_feedforward, dim_model))
     def pos_embed(self, t, pos, num_zeros=None):
         if num_zeros is None: 
             return t+pos
         else: 
-            return t if pos is None else torch.cat(t[:num_zeros],(t[num_zeros:]+pos),dim=0)
-    def forward(self, src, 
-                src_key_padding_mask = None,
-                pos = None, num_zeros = None):
-        src2 = self.ln1(src)
+            return t if pos is None else torch.cat((t[:num_zeros],(t[num_zeros:]+pos)),dim=0)
+    def forward(self, src,
+                src_mask: Optional[Tensor] = None,
+                src_key_padding_mask: Optional[Tensor] = None,
+                pos: Optional[Tensor] = None,
+                num_zeros=None):
+        src2 = self.norm1(src)
         src = self.pos_embed(src2, pos=pos, num_zeros=num_zeros)
         # MHA block
-        src2 = self.mha(src, src, src2,
+        src2 = self.mha(src, src, src2, attn_mask=src_mask,
                        key_padding_mask=src_key_padding_mask)[0]
-        src2 = self.ln2(src2)
         src = src + self.dropout1(src2)
+        src = self.norm2(src)
         src2 = self.ffn(src)
-        src2 = self.ln3(src2)
         src = src + self.dropout2(src2)
-        return src
+        return self.norm3(src)
 class EncoderLayer_B(nn.Module):
-    def __init__(self, dim_model, nhead, dim_ffn=2048, dropout=0.15, activation="relu"):
+    def __init__(self, dim_model, nhead, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
-        self.mha = nn.MultiheadAttention(dim_model, nhead, dropout=dropout, batch_first=True)
-        self.ln1 = nn.LayerNorm(dim_model)
-        self.ln2 = nn.LayerNorm(dim_model)
-        self.ln3 = nn.LayerNorm(dim_model)
+        self.mha = nn.MultiheadAttention(dim_model, nhead, dropout=dropout)
+        self.norm1 = nn.LayerNorm(dim_model)
+        self.norm2 = nn.LayerNorm(dim_model)
+        self.norm3 = nn.LayerNorm(dim_model)
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(dropout)
         # self.ffn = MLP(dim_model)
-        self.ffn = nn.Sequential(nn.Linear(dim_model, dim_ffn),
+        self.ffn = nn.Sequential(nn.Linear(dim_model, dim_feedforward),
                                  _get_activation(activation),
                                  nn.Dropout(dropout),
-                                 nn.Linear(dim_ffn, dim_model))
+                                 nn.Linear(dim_feedforward, dim_model))
         self.activation = _get_activation(activation)
-    def forward(self, query, key_value, src_key_padding_mask=None):
-        src = src2 = self.ln1(query)
-        src = self.mha(src, key_value, key_value, key_padding_mask=src_key_padding_mask)
-        src2 = self.ln2(src) + src2
-        src = self.ffn(src2)
-        src = self.ln3(src) + src2
-        return src
+    def forward(self, src, memory, src_key_padding_mask=None):
+        src = self.norm1(src)
+        src2 = self.mha(src, memory, memory, key_padding_mask=src_key_padding_mask)
+        src = src + self.dropout1(src2)
+        src = self.norm2(src)
+        src2 = self.ffn(src)
+        src = src + self.dropout1(src2)
+        return self.norm3(src)
 class MLP(nn.Module):
     """ Feedforward Network """
     def __init__(self, dim_model, hidden_dim=2048, dropout=0.15, activation="relu"):
