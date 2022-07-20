@@ -12,10 +12,10 @@ class Encoder(nn.Module):
         self.nhead = nhead
         self.num_verb_classes = 504
         # Encoder
-        layer_A = EncoderLayer_A(dim_model, nhead, dim_feedforward=dim_feedforward)
-        layer_B = EncoderLayer_B(dim_model, nhead, dim_feedforward=dim_feedforward)
-        enc_A = Encoder_A(layer_A, num_enc_layers)
-        enc_B = Encoder_B(layer_B, num_enc_layers)
+        self.enc_layer_A = EncoderLayer_A(dim_model, nhead, dim_feedforward=dim_feedforward)
+        self.enc_layer_B = EncoderLayer_B(dim_model, nhead, dim_feedforward=dim_feedforward)
+        self.enc_A = Encoder_A(self.enc_layer_A, num_enc_layers)
+        self.enc_B = Encoder_B(self.enc_layer_B, num_enc_layers)
         
         # Verb Classifier
         self.verb_classifier = nn.Sequential(nn.Linear(dim_model*2, dim_model*2),
@@ -23,8 +23,8 @@ class Encoder(nn.Module):
                                              nn.Dropout(0.3),
                                              nn.Linear(dim_model*2, self.num_verb_classes))
         self.norm1 = nn.LayerNorm(dim_model*2)
-        self._reset_parameter()
-    def _reset_parameter(self):
+        self._reset_parameters()
+    def _reset_parameters(self):
         for p in self.parameters():
             if p.dim()>1: 
                 nn.init.xavier_uniform_(p)
@@ -33,21 +33,43 @@ class Encoder(nn.Module):
             return t+pos
         else: 
             return t if pos is None else torch.cat(t[:num_zeros],(t[num_zeros:]+pos),dim=0)
-    def forward(self, img_ft, verb_ft, mask, pos_embed,
-                num_zeros=None, targets=None, inference=False):
+    def forward(self, img_ft, verb_ft, mask,
+                IL_token_embed, RL_token_embed,
+                verb_token_embed, role_token_embed,
+                pos_embed, vidx_ridx,
+                targets=None, inference=False):
         assert img_ft.shape[1] == self.dim_model
         assert verb_ft.shape == self.dim_model
         assert img_ft.shape == pos_embed.shape
+
         device = img_ft.device
+
+        # flatten from N,C,H,W to HW,N,C
+        bs,c,h,w = img_ft.shape
+        img_ft = img_ft.flatten(2).permute(2, 0, 1)
+        verb_ft = verb_ft.flatten(2).permute(2, 0, 1)
+        pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
+        mask = mask.flatten(1)
+
+        # Encoder first half
         src = torch.cat((img_ft,verb_ft),dim=0)
         img_ft, verb_ft = self.enc_A(src, src_key_padding_mask=mask, pos=pos_embed).split(1)
-        noun_ft = self.verb_classifier(verb_ft)
-        mem = self.pos_embed(img_ft, pos_embed, num_zeros)
-        src.torch.cat((verb_ft, noun_ft), dim=0)
-        src = self.enc_B(src, mem)
-        verb_ft, noun_ft = src.split(self.dim_model)
-        return verb_ft, noun_ft
 
+        # verb prediction
+        verb_ft = self.norm1(verb_ft)
+        verb_pred = self.verb_classifier(verb_ft)
+        
+        if not inference:
+            selected_roles = targets["roles"]
+        else:
+            top1_verb = torch.topk(verb_pred, k=1, dim=1)[1].item()
+            selected_roles = vidx_ridx[top1_verb]
+        # Encoder second half
+        mem = self.pos_embed(img_ft, pos_embed)
+        src = torch.cat((verb_ft, selected_roles), dim=0)
+        src = self.enc_B(src, mem)
+        verb_ft, selected_roles = src.split(self.dim_model)
+        return verb_ft, selected_roles
 class Transformer(nn.Module):
     def __init__(self, dim_model=512, nhead=8,
                  num_enc_layers=6, num_dec_layers=5, dim_feedforward=2048):
@@ -66,9 +88,9 @@ class Transformer(nn.Module):
                                              nn.Dropout(0.3),
                                              nn.Linear(dim_model*2, self.num_verb_classes))
         self.norm1 = nn.LayerNorm(dim_model*2)
-        self._reset_parameter()
+        self._reset_parameters()
         
-    def _reset_parameter(self):
+    def _reset_parameters(self):
         for p in self.parameters():
             if p.dim()>1: 
                 nn.init.xavier_uniform_(p)
