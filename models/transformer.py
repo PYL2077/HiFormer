@@ -27,13 +27,13 @@ class Transformer(nn.Module):
         self.num_verb_classes = 504
 
         # Glacne Transformer
-        glance_enc_layer = EncoderLayer_A(d_model, nhead, dim_feedforward, dropout, activation)
+        glance_enc_layer = Enc_EncoderLayer(d_model, nhead, dim_feedforward, dropout, activation)
         self.glance_enc = TransformerEncoder(glance_enc_layer, num_glance_enc_layers)
         
         # Gaze-Step1 Transformer
         gaze_s1_dec_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward, dropout, activation)
         self.gaze_s1_dec = TransformerDecoder(gaze_s1_dec_layer, num_gaze_s1_dec_layers)
-        gaze_s1_enc_layer = EncoderLayer_A(d_model, nhead, dim_feedforward, dropout, activation)
+        gaze_s1_enc_layer = Enc_EncoderLayer(d_model, nhead, dim_feedforward, dropout, activation)
         self.gaze_s1_enc = TransformerEncoder(gaze_s1_enc_layer, num_gaze_s1_enc_layers)
         
         # Gaze-Step2 Transformer
@@ -173,7 +173,7 @@ class TransformerDecoder(nn.Module):
         return output.unsqueeze(0)
 
 
-class EncoderLayer_A(nn.Module):
+class Enc_EncoderLayer(nn.Module):
     def __init__(self, dim_model, nhead, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
         self.mha = nn.MultiheadAttention(dim_model, nhead, dropout=dropout)
@@ -251,8 +251,8 @@ class TransformerDecoderLayer(nn.Module):
 
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
-        self.dec_a = Decoder_A(d_model, nhead, dim_feedforward, dropout, activation)
-        self.dec_b = EncoderLayer_B(d_model, nhead, dim_feedforward, dropout, activation)
+        self.dec_a = CoFormer_Decoder_A(d_model, nhead, dim_feedforward, dropout, activation)
+        self.dec_b = Enc_DecoderLayer(d_model, nhead, dim_feedforward, dropout, activation)
     def with_pos_embed(self, tensor, pos: Optional[Tensor]):
         return tensor if pos is None else tensor + pos
 
@@ -266,7 +266,7 @@ class TransformerDecoderLayer(nn.Module):
         tgt = self.dec_a(tgt, memory, tgt_mask, memory_mask, tgt_key_padding_mask, memory_key_padding_mask, pos, query_pos)
         tgt = self.dec_b(tgt, memory, tgt_key_padding_mask)
         return tgt
-class Decoder_A(nn.Module):
+class CoFormer_Decoder_A(nn.Module):
 
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
@@ -292,7 +292,7 @@ class Decoder_A(nn.Module):
                             key_padding_mask=tgt_key_padding_mask)[0]
         tgt = tgt + self.dropout1(tgt2)
         return tgt
-class Decoder_B(nn.Module):
+class CoFormer_Decoder_B(nn.Module):
 
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
@@ -334,7 +334,7 @@ class Decoder_B(nn.Module):
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt2))))
         tgt = tgt + self.dropout3(tgt2)
         return tgt
-class EncoderLayer_B(nn.Module):
+class Enc_DecoderLayer(nn.Module):
     def __init__(self, dim_model, nhead, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
         self.mha = nn.MultiheadAttention(dim_model, nhead, dropout=dropout)
