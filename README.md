@@ -1,6 +1,5 @@
 Based on https://github.com/jhcho99/CoFormer
 
-目前只改了 `models/transformer.py`
 
 ## Environment Setup
 We provide instructions for environment setup.
@@ -28,24 +27,15 @@ Annotations are given in JSON format, and annotation files are under "SWiG/SWiG_
 - test.json file is for test set.
 
 ## Training
-To train CoFormer on a single node with 4 GPUs for 40 epochs, run:
+To train GSRFormer on a single node with 4 GPUs for 40 epochs, run:
 ```bash
-python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py \
+python -m torch.distributed.launch --nproc_per_node=2 --use_env main.py \
            --backbone resnet50 --batch_size 16 --dataset_file swig --epochs 40 \
-           --num_workers 4 --num_glance_enc_layers 3 --num_gaze_s1_dec_layers 3 \
-           --num_gaze_s1_enc_layers 3 --num_gaze_s2_dec_layers 3 --dropout 0.15 --hidden_dim 512 \
-           --output_dir CoFormer
-```
-To train CoFormer on a Slurm cluster with submitit using 4 RTX 3090 GPUs for 40 epochs, run:
-```bash
-python run_with_submitit.py --ngpus 4 --nodes 1 --job_dir CoFormer \
-        --backbone resnet50 --batch_size 16 --dataset_file swig --epochs 40 \
-        --num_workers 4 --num_glance_enc_layers 3 --num_gaze_s1_dec_layers 3 \
-        --num_gaze_s1_enc_layers 3 --num_gaze_s2_dec_layers 3 --dropout 0.15 --hidden_dim 512 \
-        --partition rtx3090
+           --num_workers 4 --num_enc_layers 6 --num_dec_layers 5 \
+            --dropout 0.15 --hidden_dim 512 --output_dir GSRFormer
 ```
 
-- A single epoch takes about 45 minutes. Training CoFormer for 40 epochs takes around 30 hours on a single machine with 4 RTX 3090 GPUs.          
+- A single epoch takes about 38 minutes. Training CoFormer for 40 epochs takes around 25 hours on a single machine with 4 RTX 3090 GPUs.          
 - We use AdamW optimizer with learning rate 10<sup>-4</sup> (10<sup>-5</sup> for backbone), weight decay 10<sup>-4</sup> and β = (0.9, 0.999).    
     - Those learning rates are divided by 10 at epoch 30.
 - Random Color Jittering, Random Gray Scaling, Random Scaling and Random Horizontal Flipping are used for augmentation.
