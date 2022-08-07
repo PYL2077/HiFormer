@@ -40,6 +40,15 @@ python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py \
     - Those learning rates are divided by 10 at epoch 30.
 - Random Color Jittering, Random Gray Scaling, Random Scaling and Random Horizontal Flipping are used for augmentation.
 
+## Evaluation
+```bash
+python main.py --saved_model GSRFormer/checkpoint.pth --output_dir GSRFormer --dev
+```
+
+```bash
+python main.py --saved_model GSRFormer/checkpoint.pth --output_dir GSRFormer --test
+```
+
 ## Inference
 To run an inference on a custom image, run:
 ```bash
