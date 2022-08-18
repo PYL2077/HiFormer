@@ -30,7 +30,8 @@ Annotations are given in JSON format, and annotation files are under "SWiG/SWiG_
 To train GSRFormer on a single node with 4 GPUs for 40 epochs, run:
 ```bash
 python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py \
-           --backbone resnet50 --batch_size 16 --dataset_file swig --epochs 40 \
+           --backbone resnet50 --batch_size 16 --dataset_file swig \
+		   --encoder_epochs 20 --decoder_epochs 0 \
            --num_workers 4 --num_enc_layers 6 --num_dec_layers 5 \
             --dropout 0.15 --hidden_dim 512 --output_dir GSRFormer
 ```
