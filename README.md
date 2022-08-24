@@ -43,11 +43,11 @@ python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py \
 
 ## Evaluation
 ```bash
-python main.py --saved_model GSRFormer/checkpoint.pth --output_dir GSRFormer --dev
+python main.py --output_dir GSRFormer --dev
 ```
 
 ```bash
-python main.py --saved_model GSRFormer/checkpoint.pth --output_dir GSRFormer --test
+python main.py --output_dir GSRFormer --test
 ```
 
 ## Inference
