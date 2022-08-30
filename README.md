@@ -1,11 +1,3 @@
-train_segment: Training set
-val_segment: Validation set
-test_segment: Test set
-
------------------------
-
-
-
 Based on https://github.com/jhcho99/CoFormer
 
 
