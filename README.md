@@ -1,3 +1,11 @@
+train_segment: Training set
+val_segment: Validation set
+test_segment: Test set
+
+-----------------------
+
+
+
 Based on https://github.com/jhcho99/CoFormer
 
 
@@ -30,8 +38,7 @@ Annotations are given in JSON format, and annotation files are under "SWiG/SWiG_
 To train GSRFormer on a single node with 4 GPUs for 40 epochs, run:
 ```bash
 python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py \
-           --backbone resnet50 --batch_size 16 --dataset_file swig \
-		   --encoder_epochs 20 --decoder_epochs 0 \
+           --backbone resnet50 --batch_size 16 --dataset_file swig --epochs 40 \
            --num_workers 4 --num_enc_layers 6 --num_dec_layers 5 \
             --dropout 0.15 --hidden_dim 512 --output_dir GSRFormer
 ```
@@ -40,15 +47,6 @@ python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py \
 - We use AdamW optimizer with learning rate 10<sup>-4</sup> (10<sup>-5</sup> for backbone), weight decay 10<sup>-4</sup> and β = (0.9, 0.999).    
     - Those learning rates are divided by 10 at epoch 30.
 - Random Color Jittering, Random Gray Scaling, Random Scaling and Random Horizontal Flipping are used for augmentation.
-
-## Evaluation
-```bash
-python main.py --output_dir GSRFormer --dev
-```
-
-```bash
-python main.py --output_dir GSRFormer --test
-```
 
 ## Inference
 To run an inference on a custom image, run:
