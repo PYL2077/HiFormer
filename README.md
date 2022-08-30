@@ -19,7 +19,7 @@ cd GSRFormer
 # Create a conda environment, activate the environment and install PyTorch via conda
 conda create --name GSRFormer python=3.9              
 conda activate GSRFormer
-conda install pytorch==1.9.0 torchvision==0.10.0 cudatoolkit=11.3 -c pytorch -c conda-forge
+conda install pytorch==1.8.0 torchvision==0.9.0 cudatoolkit=11.1 -c pytorch -c conda-forge
 
 # Install requirements via pip
 pip install -r requirements.txt                   
@@ -47,6 +47,12 @@ python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py \
 - We use AdamW optimizer with learning rate 10<sup>-4</sup> (10<sup>-5</sup> for backbone), weight decay 10<sup>-4</sup> and β = (0.9, 0.999).    
     - Those learning rates are divided by 10 at epoch 30.
 - Random Color Jittering, Random Gray Scaling, Random Scaling and Random Horizontal Flipping are used for augmentation.
+
+## Evaluation
+```bash
+python main.py --output_dir GSRFormer --dev
+python main.py --output_dir GSRFormer --test
+```
 
 ## Inference
 To run an inference on a custom image, run:
