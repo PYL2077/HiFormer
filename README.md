@@ -1,4 +1,4 @@
-Based on https://github.com/jhcho99/CoFormer
+Code is based on https://github.com/jhcho99/CoFormer
 
 
 ## Environment Setup
