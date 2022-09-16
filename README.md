@@ -5,7 +5,7 @@ Code is based on https://github.com/jhcho99/CoFormer
 We provide instructions for environment setup.
 ```bash
 # Clone this repository and navigate into the repository
-git clone https://github.com/PYL2077/GSRFormer.git
+git clone https://github.com/PYL2077/HiFormer.git
 cd GSRFormer
 
 # Create a conda environment, activate the environment and install PyTorch via conda
