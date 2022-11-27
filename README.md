@@ -48,7 +48,7 @@ python main.py --output_dir HiFormer --dev
 python main.py --output_dir HiFormer --test
 ```
 
-Model Checkpoint can be downloaded [here](https://drive.google.com/file/d/1snS2aYo3R-rblQc0Ba7-YZ4mRdhq-6py/view?usp=share_link)
+Model Checkpoint can be downloaded [here](https://drive.google.com/u/0/uc?id=1snS2aYo3R-rblQc0Ba7-YZ4mRdhq-6py&export=download)
 
 ## Inference
 To run an inference on a custom image, run:
