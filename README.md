@@ -42,10 +42,13 @@ python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py \
 - Random Color Jittering, Random Gray Scaling, Random Scaling and Random Horizontal Flipping are used for augmentation.
 
 ## Evaluation
+
 ```bash
 python main.py --output_dir HiFormer --dev
 python main.py --output_dir HiFormer --test
 ```
+
+Model Checkpoint can be downloaded [here](https://drive.google.com/file/d/1snS2aYo3R-rblQc0Ba7-YZ4mRdhq-6py/view?usp=share_link)
 
 ## Inference
 To run an inference on a custom image, run:
@@ -53,4 +56,3 @@ To run an inference on a custom image, run:
 python inference.py --image_path inference/filename.jpg \
                     --output_dir inference
 ```
-
