@@ -22,9 +22,9 @@ from torch.utils.data import DataLoader, DistributedSampler
 from torch.utils.data import Subset
 from datasets import build_dataset, build_processed_dataset
 from engine import preprocess_neighbors
-from engine import leaf_evaluate_swig, evaluate_swig
-from engine import leaf_train_one_epoch, root_train_one_epoch
-from models import build_leaf_model, build_root_model
+from engine import encoder_evaluate_swig, evaluate_swig
+from engine import encoder_train_one_epoch, decoder_train_one_epoch
+from models import build_encoder_model, build_decoder_model
 from pathlib import Path
 
 
@@ -36,10 +36,10 @@ def get_args_parser():
     parser.add_argument('--weight_decay', default=1e-4, type=float)
     parser.add_argument('--clip_max_norm', default=0.1, type=float,
                         help='gradient clipping max norm')
-    parser.add_argument('--leaf_batch_size', default=16, type=int)
-    parser.add_argument('--root_batch_size', default=4, type=int)
-    parser.add_argument('--leaf_epochs', default=0, type=int)
-    parser.add_argument('--root_epochs', default=0, type=int)
+    parser.add_argument('--encoder_batch_size', default=16, type=int)
+    parser.add_argument('--decoder_batch_size', default=4, type=int)
+    parser.add_argument('--encoder_epochs', default=0, type=int)
+    parser.add_argument('--decoder_epochs', default=0, type=int)
 
     # Backbone parameters
     parser.add_argument('--backbone', default='resnet50', type=str,
@@ -49,9 +49,9 @@ def get_args_parser():
 
     # Transformer parameters
     parser.add_argument('--num_enc_layers', default=6, type=int,
-                        help="Number of encoding layers in HiFormer")
+                        help="Number of encoding layers in GSRFormer")
     parser.add_argument('--num_dec_layers', default=5, type=int,
-                        help="Number of decoding layers in HiFormer")
+                        help="Number of decoding layers in GSRFormer")
     parser.add_argument('--dim_feedforward', default=2048, type=int,
                         help="Intermediate size of the feedforward layers in the transformer blocks")
     parser.add_argument('--hidden_dim', default=512, type=int,
@@ -81,17 +81,17 @@ def get_args_parser():
     parser.add_argument('--device', default='cuda',
                         help='device to use for training / testing')
     parser.add_argument('--seed', default=42, type=int)
-    parser.add_argument('--leaf_start_epoch', default=0, type=int, metavar='N',
-                        help='leaf start epoch')
-    parser.add_argument('--root_start_epoch', default=0, type=int, metavar='N',
-                        help='root start epoch')
+    parser.add_argument('--encoder_start_epoch', default=0, type=int, metavar='N',
+                        help='encoder start epoch')
+    parser.add_argument('--decoder_start_epoch', default=0, type=int, metavar='N',
+                        help='decoder start epoch')
     parser.add_argument('--num_workers', default=4, type=int)
-    parser.add_argument('--leaf_saved_model', default='HiFormer/leaf_checkpoint.pth',
-                        help='path where saved leaf model is')
-    parser.add_argument('--root_saved_model', default='HiFormer/root_checkpoint.pth',
-                        help='path where saved root model is')    
-    parser.add_argument('--load_saved_leaf', default=False, type=bool)
-    parser.add_argument('--load_saved_root', default=False, type=bool)
+    parser.add_argument('--encoder_saved_model', default='GSRFormer/encoder_checkpoint.pth',
+                        help='path where saved encoder model is')
+    parser.add_argument('--decoder_saved_model', default='GSRFormer/decoder_checkpoint.pth',
+                        help='path where saved decoder model is')    
+    parser.add_argument('--load_saved_encoder', default=False, type=bool)
+    parser.add_argument('--load_saved_decoder', default=False, type=bool)
     parser.add_argument('--preprocess', default=False, type=bool)
     parser.add_argument('--images_per_segment', default=9463, type=int)
     parser.add_argument('--images_per_eval_segment', default=12600, type=int)
@@ -127,63 +127,63 @@ def main(args):
     args.num_noun_classes = dataset_train.num_nouns()
     dataset_val = build_dataset(image_set='val', args=args)
     dataset_test = build_dataset(image_set='test', args=args)
-    # build Leaf Transformer model
-    leaf_model, leaf_criterion = build_leaf_model(args)
-    leaf_model.to(device)
-    leaf_model_without_ddp = leaf_model
-    if args.load_saved_leaf == True:
-        leaf_checkpoint = torch.load(args.leaf_saved_model, map_location='cpu')
-        leaf_model.load_state_dict(leaf_checkpoint["leaf_model"])
+    # build Encoder Transformer model
+    encoder_model, encoder_criterion = build_encoder_model(args)
+    encoder_model.to(device)
+    encoder_model_without_ddp = encoder_model
+    if args.load_saved_encoder == True:
+        encoder_checkpoint = torch.load(args.encoder_saved_model, map_location='cpu')
+        encoder_model.load_state_dict(encoder_checkpoint["encoder_model"])
     if args.distributed:
-        leaf_model = torch.nn.parallel.DistributedDataParallel(leaf_model, device_ids=[args.gpu])
-        leaf_model_without_ddp = leaf_model.module
-    num_leaf_parameters = sum(p.numel() for p in leaf_model.parameters() if p.requires_grad)
-    print('number of Leaf Transformer parameters:', num_leaf_parameters)
-    leaf_param_dicts = [
-        {"params": [p for n, p in leaf_model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
+        encoder_model = torch.nn.parallel.DistributedDataParallel(encoder_model, device_ids=[args.gpu])
+        encoder_model_without_ddp = encoder_model.module
+    num_encoder_parameters = sum(p.numel() for p in encoder_model.parameters() if p.requires_grad)
+    print('number of Encoder Transformer parameters:', num_encoder_parameters)
+    encoder_param_dicts = [
+        {"params": [p for n, p in encoder_model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
         {
-            "params": [p for n, p in leaf_model_without_ddp.named_parameters() if "backbone" in n and p.requires_grad],
+            "params": [p for n, p in encoder_model_without_ddp.named_parameters() if "backbone" in n and p.requires_grad],
             "lr": args.lr_backbone,
         }
     ]
-    leaf_optimizer = torch.optim.AdamW(leaf_param_dicts, lr=args.lr, weight_decay=args.weight_decay)
-    leaf_lr_scheduler = torch.optim.lr_scheduler.StepLR(leaf_optimizer, args.lr_drop)
+    encoder_optimizer = torch.optim.AdamW(encoder_param_dicts, lr=args.lr, weight_decay=args.weight_decay)
+    encoder_lr_scheduler = torch.optim.lr_scheduler.StepLR(encoder_optimizer, args.lr_drop)
     
-    if args.load_saved_leaf == True:
-        leaf_optimizer.load_state_dict(leaf_checkpoint["leaf_optimizer"])
-        leaf_lr_scheduler.load_state_dict(leaf_checkpoint["leaf_lr_scheduler"])
-        args.leaf_start_epoch = leaf_checkpoint["leaf_epoch"] + 1
+    if args.load_saved_encoder == True:
+        encoder_optimizer.load_state_dict(encoder_checkpoint["encoder_optimizer"])
+        encoder_lr_scheduler.load_state_dict(encoder_checkpoint["encoder_lr_scheduler"])
+        args.encoder_start_epoch = encoder_checkpoint["encoder_epoch"] + 1
 
-    # build Root Transformer Model
-    root_model, root_criterion = build_root_model(args)
-    root_model.to(device)
-    root_model_without_ddp = root_model
-    if args.load_saved_root == True:
-        root_checkpoint = torch.load(args.root_saved_model, map_location='cpu')
-        root_model.load_state_dict(root_checkpoint["root_model"])
+    # build Decoder Transformer Model
+    decoder_model, decoder_criterion = build_decoder_model(args)
+    decoder_model.to(device)
+    decoder_model_without_ddp = decoder_model
+    if args.load_saved_decoder == True:
+        decoder_checkpoint = torch.load(args.decoder_saved_model, map_location='cpu')
+        decoder_model.load_state_dict(decoder_checkpoint["decoder_model"])
     if args.distributed:
-        root_model = torch.nn.parallel.DistributedDataParallel(root_model, device_ids=[args.gpu])
-        root_model_without_ddp = root_model.module
-    num_root_parameters = sum(p.numel() for p in root_model.parameters() if p.requires_grad)
-    print('number of Root Transformer parameters:', num_root_parameters)
-    root_param_dicts = [
-        {"params": [p for n, p in root_model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
+        decoder_model = torch.nn.parallel.DistributedDataParallel(decoder_model, device_ids=[args.gpu])
+        decoder_model_without_ddp = decoder_model.module
+    num_decoder_parameters = sum(p.numel() for p in decoder_model.parameters() if p.requires_grad)
+    print('number of Decoder Transformer parameters:', num_decoder_parameters)
+    decoder_param_dicts = [
+        {"params": [p for n, p in decoder_model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
         {
-            "params": [p for n, p in root_model_without_ddp.named_parameters() if "backbone" in n and p.requires_grad],
+            "params": [p for n, p in decoder_model_without_ddp.named_parameters() if "backbone" in n and p.requires_grad],
             "lr": args.lr_backbone,
         }
     ]
-    root_optimizer = torch.optim.AdamW(root_param_dicts, lr=args.lr, weight_decay=args.weight_decay)
-    root_lr_scheduler = torch.optim.lr_scheduler.StepLR(root_optimizer, args.lr_drop)
-    if args.load_saved_root == True:
+    decoder_optimizer = torch.optim.AdamW(decoder_param_dicts, lr=args.lr, weight_decay=args.weight_decay)
+    decoder_lr_scheduler = torch.optim.lr_scheduler.StepLR(decoder_optimizer, args.lr_drop)
+    if args.load_saved_decoder == True:
         """
-        root_optimizer.load_state_dict(root_checkpoint["root_optimizer"])
-        root_lr_scheduler.load_state_dict(root_checkpoint["root_lr_scheduler"])
+        decoder_optimizer.load_state_dict(decoder_checkpoint["decoder_optimizer"])
+        decoder_lr_scheduler.load_state_dict(decoder_checkpoint["decoder_lr_scheduler"])
         """
-        args.root_start_epoch = root_checkpoint["root_epoch"] + 1
+        args.decoder_start_epoch = decoder_checkpoint["decoder_epoch"] + 1
 
     # Dataset Sampler
-    # For Leaf Transformer
+    # For Encoder Transformer
     if not args.test and not args.dev:
         if args.distributed:
             sampler_train = DistributedSampler(dataset_train)
@@ -210,9 +210,9 @@ def main(args):
 
     output_dir = Path(args.output_dir)
     # dataset loader
-    # For Leaf Transformer
+    # For Encoder Transformer
     if not args.test and not args.dev:
-        batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.leaf_batch_size, drop_last=True)
+        batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.encoder_batch_size, drop_last=True)
         data_loader_train = DataLoader(dataset_train, num_workers=args.num_workers,
                                     collate_fn=collater, batch_sampler=batch_sampler_train)
         data_loader_val = DataLoader(dataset_val, num_workers=args.num_workers,
@@ -226,9 +226,9 @@ def main(args):
                                         drop_last=False, collate_fn=collater, sampler=sampler_test)
     # For Preprocessing
     if args.preprocess == True:
-        batch_preprocess_sampler_train = torch.utils.data.BatchSampler(preprocess_sampler_train, args.leaf_batch_size, drop_last=False)
-        batch_preprocess_sampler_val = torch.utils.data.BatchSampler(preprocess_sampler_val, args.leaf_batch_size, drop_last=False)
-        batch_preprocess_sampler_test = torch.utils.data.BatchSampler(preprocess_sampler_test, args.leaf_batch_size, drop_last=False)
+        batch_preprocess_sampler_train = torch.utils.data.BatchSampler(preprocess_sampler_train, args.encoder_batch_size, drop_last=False)
+        batch_preprocess_sampler_val = torch.utils.data.BatchSampler(preprocess_sampler_val, args.encoder_batch_size, drop_last=False)
+        batch_preprocess_sampler_test = torch.utils.data.BatchSampler(preprocess_sampler_test, args.encoder_batch_size, drop_last=False)
         
         preprocess_data_loader_train = DataLoader(dataset_train, num_workers=args.num_workers, drop_last=False,
                                                   collate_fn=collater, batch_sampler=batch_preprocess_sampler_train)
@@ -240,10 +240,10 @@ def main(args):
 
     # use saved model for evaluation (using dev set or test set)
     if args.dev or args.test:
-        leaf_checkpoint = torch.load(args.leaf_saved_model, map_location='cpu')
-        leaf_model.load_state_dict(leaf_checkpoint["leaf_model"])
-        root_checkpoint = torch.load(args.root_saved_model, map_location='cpu')
-        root_model.load_state_dict(root_checkpoint["root_model"])
+        encoder_checkpoint = torch.load(args.encoder_saved_model, map_location='cpu')
+        encoder_model.load_state_dict(encoder_checkpoint["encoder_model"])
+        decoder_checkpoint = torch.load(args.decoder_saved_model, map_location='cpu')
+        decoder_model.load_state_dict(decoder_checkpoint["decoder_model"])
         # build dataset
         if args.dev:
             with open("__storage__/valDict.json") as val_json:
@@ -269,7 +269,7 @@ def main(args):
                                      sampler=sampler_test)
             
 
-        test_stats = evaluate_swig(leaf_model, root_model, root_criterion,
+        test_stats = evaluate_swig(encoder_model, decoder_model, decoder_criterion,
                                    data_loader, device, args.output_dir)
         log_stats = {**{f'test_{k}': v for k, v in test_stats.items()}}
 
@@ -282,37 +282,37 @@ def main(args):
     
     if not os.path.exists("__storage__"):
         os.mkdir("__storage__")
-    # train HiFormer Leaf Transformer
-    print("Start training HiFormer Leaf Transformer at epoch ",args.leaf_start_epoch)
+    # train GSRFormer Encoder Transformer
+    print("Start training GSRFormer Encoder Transformer at epoch ",args.encoder_start_epoch)
     start_time = time.time()
     max_test_verb_acc_top1 = 4
-    for epoch in range(args.leaf_start_epoch, args.leaf_epochs):
+    for epoch in range(args.encoder_start_epoch, args.encoder_epochs):
         # train one epoch
         if args.distributed:
             sampler_train.set_epoch(epoch)
-        train_stats = leaf_train_one_epoch(leaf_model, leaf_criterion, data_loader_train, leaf_optimizer, 
+        train_stats = encoder_train_one_epoch(encoder_model, encoder_criterion, data_loader_train, encoder_optimizer, 
                                       device, epoch, args.clip_max_norm)
-        leaf_lr_scheduler.step()
+        encoder_lr_scheduler.step()
 
         # evaluate
-        test_stats = leaf_evaluate_swig(leaf_model, leaf_criterion, data_loader_val, device, args.output_dir)
+        test_stats = encoder_evaluate_swig(encoder_model, encoder_criterion, data_loader_val, device, args.output_dir)
 
         # log & output
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      **{f'test_{k}': v for k, v in test_stats.items()},
-                     'leaf_epoch': epoch,
-                     'num_leaf_parameters': num_leaf_parameters} 
+                     'encoder_epoch': epoch,
+                     'num_encoder_parameters': num_encoder_parameters} 
         if args.output_dir:
-            checkpoint_paths = [output_dir / 'leaf_checkpoint.pth']
+            checkpoint_paths = [output_dir / 'encoder_checkpoint.pth']
             # save checkpoint for every new max accuracy
             if log_stats['test_verb_acc_top1_unscaled'] > max_test_verb_acc_top1:
                 max_test_verb_acc_top1 = log_stats['test_verb_acc_top1_unscaled']
-                checkpoint_paths.append(output_dir / f'leaf_checkpoint{epoch:04}.pth')
+                checkpoint_paths.append(output_dir / f'encoder_checkpoint{epoch:04}.pth')
             for checkpoint_path in checkpoint_paths:
-                utils.save_on_master({'leaf_model': leaf_model_without_ddp.state_dict(),
-                                      'leaf_optimizer': leaf_optimizer.state_dict(),
-                                      'leaf_lr_scheduler': leaf_lr_scheduler.state_dict(),
-                                      'leaf_epoch': epoch,
+                utils.save_on_master({'encoder_model': encoder_model_without_ddp.state_dict(),
+                                      'encoder_optimizer': encoder_optimizer.state_dict(),
+                                      'encoder_lr_scheduler': encoder_lr_scheduler.state_dict(),
+                                      'encoder_epoch': epoch,
                                       'args': args}, checkpoint_path)
         # write log
         if args.output_dir and utils.is_main_process():
@@ -326,23 +326,23 @@ def main(args):
     # Preprocess
     torch.cuda.empty_cache()
     if args.preprocess == True:
-        preprocess_neighbors(leaf_model, preprocess_data_loader_train,
+        preprocess_neighbors(encoder_model, preprocess_data_loader_train,
                              "train", device, args.images_per_segment)
-        preprocess_neighbors(leaf_model, preprocess_data_loader_val,
+        preprocess_neighbors(encoder_model, preprocess_data_loader_val,
                              "val", device, args.images_per_eval_segment)
-        preprocess_neighbors(leaf_model, preprocess_data_loader_test,
+        preprocess_neighbors(encoder_model, preprocess_data_loader_test,
                              "test", device, args.images_per_eval_segment)
-    if args.root_start_epoch >= args.root_epochs:
+    if args.decoder_start_epoch >= args.decoder_epochs:
         return None
     
-    # build Root Transformer dataset
+    # build Decoder Transformer dataset
     with open("__storage__/trainDict.json") as train_json:
         train_dict = json.load(train_json)
     with open("__storage__/valDict.json") as val_json:
         val_dict = json.load(val_json)
     processed_dataset_train = build_processed_dataset("train", args, neighbors_dict=train_dict)
     processed_dataset_val = build_processed_dataset("val", args, neighbors_dict=val_dict)
-    # build Root Transformer dataset sampler
+    # build Decoder Transformer dataset sampler
     if args.distributed:
         sampler_train = DistributedSampler(processed_dataset_train)
         sampler_val = DistributedSampler(processed_dataset_val, shuffle=False)
@@ -350,47 +350,47 @@ def main(args):
         sampler_train = torch.utils.data.RandomSampler(processed_dataset_train)
         sampler_val = torch.utils.data.SequentialSampler(processed_dataset_val)
     
-    # build Root Transformer dataset loader
-    batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.root_batch_size, drop_last=True)
+    # build Decoder Transformer dataset loader
+    batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.decoder_batch_size, drop_last=True)
     data_loader_train = DataLoader(processed_dataset_train, num_workers=args.num_workers,
                                    collate_fn=processed_collater, batch_sampler=batch_sampler_train)
     data_loader_val = DataLoader(processed_dataset_val, num_workers=args.num_workers,
                                  drop_last=False, collate_fn=processed_collater, sampler=sampler_val)
 
-    # Train HiFormer Root Transformer
-    print("Start training HiFormer Root Transformer at epoch ",args.root_start_epoch)
+    # Train GSRFormer Decoder Transformer
+    print("Start training GSRFormer Decoder Transformer at epoch ",args.decoder_start_epoch)
     start_time = time.time()
     max_test_verb_acc_top1 = 43
-    for epoch in range(args.root_start_epoch, args.root_epochs):
+    for epoch in range(args.decoder_start_epoch, args.decoder_epochs):
         # train one epoch
         if args.distributed:
             sampler_train.set_epoch(epoch)
-        train_stats = root_train_one_epoch(root_model, root_criterion, leaf_model,
-                                              data_loader_train, root_optimizer, 
+        train_stats = decoder_train_one_epoch(decoder_model, decoder_criterion, encoder_model,
+                                              data_loader_train, decoder_optimizer, 
                                               device, epoch, args.images_per_segment,
                                               args.clip_max_norm)
-        root_lr_scheduler.step()
+        decoder_lr_scheduler.step()
 
         # evaluate
-        test_stats = evaluate_swig(leaf_model, root_model, root_criterion,
+        test_stats = evaluate_swig(encoder_model, decoder_model, decoder_criterion,
                                            data_loader_val, device, args.output_dir)
 
         # log & output
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      **{f'test_{k}': v for k, v in test_stats.items()},
-                     'root_epoch': epoch,
-                     'num_root_parameters': num_root_parameters} 
+                     'decoder_epoch': epoch,
+                     'num_decoder_parameters': num_decoder_parameters} 
         if args.output_dir:
-            checkpoint_paths = [output_dir / 'root_checkpoint.pth']
+            checkpoint_paths = [output_dir / 'decoder_checkpoint.pth']
             # save checkpoint for every new max accuracy
             if log_stats['test_verb_acc_top1_unscaled'] > max_test_verb_acc_top1:
                 max_test_verb_acc_top1 = log_stats['test_verb_acc_top1_unscaled']
-                checkpoint_paths.append(output_dir / f'root_checkpoint{epoch:04}.pth')
+                checkpoint_paths.append(output_dir / f'decoder_checkpoint{epoch:04}.pth')
             for checkpoint_path in checkpoint_paths:
-                utils.save_on_master({'root_model': root_model_without_ddp.state_dict(),
-                                      'root_optimizer': root_optimizer.state_dict(),
-                                      'root_lr_scheduler': root_lr_scheduler.state_dict(),
-                                      'root_epoch': epoch,
+                utils.save_on_master({'decoder_model': decoder_model_without_ddp.state_dict(),
+                                      'decoder_optimizer': decoder_optimizer.state_dict(),
+                                      'decoder_lr_scheduler': decoder_lr_scheduler.state_dict(),
+                                      'decoder_epoch': epoch,
                                       'args': args}, checkpoint_path)
         # write log
         if args.output_dir and utils.is_main_process():
@@ -404,7 +404,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('HiFormer training and evaluation script', parents=[get_args_parser()])
+    parser = argparse.ArgumentParser('GSRFormer training and evaluation script', parents=[get_args_parser()])
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)

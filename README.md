@@ -6,11 +6,11 @@ We provide instructions for environment setup.
 ```bash
 # Clone this repository and navigate into the repository
 git clone https://github.com/PYL2077/HiFormer.git
-cd HiFormer
+cd GSRFormer
 
 # Create a conda environment, activate the environment and install PyTorch via conda
-conda create --name HiFormer python=3.9              
-conda activate HiFormer
+conda create --name GSRFormer python=3.9              
+conda activate GSRFormer
 conda install pytorch==1.8.0 torchvision==0.9.0 cudatoolkit=11.1 -c pytorch -c conda-forge
 
 # Install requirements via pip
@@ -27,14 +27,14 @@ Annotations are given in JSON format, and annotation files are under "SWiG/SWiG_
 - test.json file is for test set.
 
 ## Training
-To train HiFormer on a single node with 4 GPUs, run:
+To train GSRFormer on a single node with 4 GPUs, run:
 ```bash
 python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py \
            --backbone resnet50 --dataset_file swig \
-		   --leaf_epochs 20 --root_epochs 25 \
+		   --encoder_epochs 20 --decoder_epochs 25 \
             --preprocess True \
            --num_workers 4 --num_enc_layers 6 --num_dec_layers 5 \
-            --dropout 0.15 --hidden_dim 512 --output_dir HiFormer
+            --dropout 0.15 --hidden_dim 512 --output_dir GSRFormer
 ```
 
 - We use AdamW optimizer with learning rate 10<sup>-4</sup> (10<sup>-5</sup> for backbone), weight decay 10<sup>-4</sup> and β = (0.9, 0.999).    
@@ -44,8 +44,8 @@ python -m torch.distributed.launch --nproc_per_node=4 --use_env main.py \
 ## Evaluation
 
 ```bash
-python main.py --output_dir HiFormer --dev
-python main.py --output_dir HiFormer --test
+python main.py --output_dir GSRFormer --dev
+python main.py --output_dir GSRFormer --test
 ```
 
 Model Checkpoint can be downloaded [here](https://drive.google.com/u/0/uc?id=1snS2aYo3R-rblQc0Ba7-YZ4mRdhq-6py&export=download)

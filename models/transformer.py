@@ -5,7 +5,7 @@ from turtle import forward
 from typing import Optional
 import torch
 from torch import nn, Tensor
-class Leaf_Transformer_Encoder(nn.Module):
+class Encoder_Transformer_Encoder(nn.Module):
     def __init__(self, dim_model=512, nhead=8, num_enc_layers=6, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
         self.dim_model = dim_model
@@ -13,8 +13,8 @@ class Leaf_Transformer_Encoder(nn.Module):
         self.num_verb_classes = 504
         self.verb_tokens = nn.Parameter(torch.zeros((1,dim_model)), requires_grad = True)
         # Encoder
-        enc_layer = Leaf_Encoder_Layer(dim_model, nhead, dim_feedforward, dropout, activation)
-        self.encoder = Leaf_Encoder(enc_layer, num_enc_layers)
+        enc_layer = Encoder_Encoder_Layer(dim_model, nhead, dim_feedforward, dropout, activation)
+        self.encoder = Encoder_Encoder(enc_layer, num_enc_layers)
         
         # Verb Classifier
         self.verb_classifier = nn.Sequential(nn.Linear(dim_model, dim_model),
@@ -56,15 +56,15 @@ class Leaf_Transformer_Encoder(nn.Module):
         verb_ft = verb_ft.unsqueeze(0)
         
         return img_ft, verb_ft, verb_pred
-class Leaf_Transformer_Decoder(nn.Module):
+class Encoder_Transformer_Decoder(nn.Module):
     def __init__(self, dim_model=512, nhead=8, num_enc_layers=6, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
         self.dim_model = dim_model
         self.nhead = nhead
         self.num_verb_classes = 504
         # Encoder
-        dec_layer = Leaf_Decoder_Layer(dim_model, nhead, dim_feedforward, dropout, activation)
-        self.decoder = Leaf_Decoder(dec_layer, num_enc_layers)
+        dec_layer = Encoder_Decoder_Layer(dim_model, nhead, dim_feedforward, dropout, activation)
+        self.decoder = Encoder_Decoder(dec_layer, num_enc_layers)
         
         self._reset_parameters()
     def _reset_parameters(self):
@@ -110,7 +110,7 @@ class Leaf_Transformer_Decoder(nn.Module):
         """
         return verb_ft, noun_ft, selected_role_tokens
 
-class Leaf_Encoder(nn.Module):
+class Encoder_Encoder(nn.Module):
     def __init__(self, layer, num_layers):
         super().__init__()
         self.layers = _get_clones(layer, num_layers)
@@ -124,7 +124,7 @@ class Leaf_Encoder(nn.Module):
             src = layer(src, src_mask=mask,
                            src_key_padding_mask=src_key_padding_mask, pos=pos, num_zeros=num_zeros)
         return src
-class Leaf_Decoder(nn.Module):
+class Encoder_Decoder(nn.Module):
     def __init__(self, layer, num_layers):
         super().__init__()
         self.layers = _get_clones(layer, num_layers)
@@ -143,7 +143,7 @@ class Leaf_Decoder(nn.Module):
                            memory_key_padding_mask=memory_key_padding_mask,
                            pos=pos, query_pos=query_pos)
         return tgt
-class Leaf_Encoder_Layer(nn.Module):
+class Encoder_Encoder_Layer(nn.Module):
     def __init__(self, dim_model, nhead, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
         self.mha = nn.MultiheadAttention(dim_model, nhead, dropout=dropout)
@@ -177,7 +177,7 @@ class Leaf_Encoder_Layer(nn.Module):
         src2 = self.ffn(src)
         src = src + self.dropout2(src2)
         return self.norm3(src)
-class Leaf_Decoder_Layer(nn.Module):
+class Encoder_Decoder_Layer(nn.Module):
     def __init__(self, dim_model, nhead, dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
         self.mha = nn.MultiheadAttention(dim_model, nhead, dropout=dropout)
@@ -216,7 +216,7 @@ class Leaf_Decoder_Layer(nn.Module):
         tgt = tgt + self.dropout2(tgt2)
         return self.norm3(tgt)
 
-class Root_Transformer(nn.Module):
+class Decoder_Transformer(nn.Module):
     def __init__(self, dim_model=512, nhead=8, num_dec_layers=6,
                  dim_feedforward=2048, dropout=0.15, activation="relu"):
         super().__init__()
@@ -224,8 +224,8 @@ class Root_Transformer(nn.Module):
         self.nhead = nhead
         self.num_verb_classes = 504
 
-        decoder_layer = Root_Transformer_Layer(dim_model, nhead, dim_feedforward, dropout, activation)
-        self.decoder = Sub_Root_Transformer(decoder_layer, num_dec_layers)
+        decoder_layer = Decoder_Transformer_Layer(dim_model, nhead, dim_feedforward, dropout, activation)
+        self.decoder = Sub_Decoder_Transformer(decoder_layer, num_dec_layers)
         self._reset_parameters()
     def _reset_parameters(self):
         for p in self.parameters():
@@ -238,7 +238,7 @@ class Root_Transformer(nn.Module):
         features = self.decoder(features, role_tokens)
         return features[0:1]
 
-class Sub_Root_Transformer(nn.Module):
+class Sub_Decoder_Transformer(nn.Module):
     def __init__(self, layer, num_layers):
         super().__init__()
         self.layers = _get_clones(layer, num_layers)
@@ -246,7 +246,7 @@ class Sub_Root_Transformer(nn.Module):
         for layer in self.layers:
             features = layer(features, role_embed)
         return features
-class Root_Transformer_Layer(nn.Module):
+class Decoder_Transformer_Layer(nn.Module):
     def __init__(self, dim_model, nhead, dim_feedforward=2048, dropout=0.15, activation="relu", support_set_size=5):
         super().__init__()
         self.support_set_size = 5
@@ -337,13 +337,13 @@ def _get_activation(opt):
 def _get_clones(layer, n):
     return nn.ModuleList(copy.deepcopy(layer) for _ in range(n))
 
-def build_leaf_encoder(args):
-    return Leaf_Transformer_Encoder(args.hidden_dim, args.nheads,
+def build_encoder_encoder(args):
+    return Encoder_Transformer_Encoder(args.hidden_dim, args.nheads,
                                   args.num_enc_layers, args.dim_feedforward, args.dropout)
-def build_leaf_decoder(args):
-    return Leaf_Transformer_Decoder(args.hidden_dim, args.nheads,
+def build_encoder_decoder(args):
+    return Encoder_Transformer_Decoder(args.hidden_dim, args.nheads,
                                    args.num_enc_layers, args.dim_feedforward, args.dropout)
 
-def build_root_transformer(args):
-    return Root_Transformer(args.hidden_dim, args.nheads,
+def build_decoder_transformer(args):
+    return Decoder_Transformer(args.hidden_dim, args.nheads,
                               args.num_dec_layers, args.dim_feedforward, args.dropout)

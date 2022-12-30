@@ -7,10 +7,10 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved [see LICENSE for details]
 # ----------------------------------------------------------------------------------------------
 
-from .hiformer import build_leaf_transformer
-from .hiformer import build_root_transformer
+from .gsrformer import build_encoder_transformer
+from .gsrformer import build_decoder_transformer
 
-def build_leaf_model(args):
-    return build_leaf_transformer(args)
-def build_root_model(args):
-    return build_root_transformer(args)
+def build_encoder_model(args):
+    return build_encoder_transformer(args)
+def build_decoder_model(args):
+    return build_decoder_transformer(args)

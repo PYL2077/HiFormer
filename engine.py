@@ -7,7 +7,7 @@ from torch import nn
 import util.misc as utils
 from typing import Iterable
 
-def leaf_train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
+def encoder_train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
                             data_loader: Iterable, optimizer: torch.optim.Optimizer,
                             device: torch.device, epoch: int, max_norm: float = 0):
     model.train()
@@ -110,7 +110,7 @@ def preprocess_neighbors(model: torch.nn.Module, data_loader: Iterable, image_se
     f = open(f"__storage__/{image_set}Dict.json","w")
     f.write(neighbor_dict_json)
     f.close()
-def root_train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module, preprocessor: torch.nn.Module,
+def decoder_train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module, preprocessor: torch.nn.Module,
                             data_loader: Iterable, optimizer: torch.optim.Optimizer,
                             device: torch.device, epoch: int, img_per_seg, max_norm: float = 0):
     model.train()
@@ -176,7 +176,7 @@ def root_train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module, pre
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 @torch.no_grad()
-def leaf_evaluate_swig(model, criterion, data_loader, device, output_dir):
+def encoder_evaluate_swig(model, criterion, data_loader, device, output_dir):
     model.eval()
     criterion.eval()
     metric_logger = utils.MetricLogger(delimiter="  ")
@@ -266,6 +266,5 @@ def get_neighbors(features):
         avg_sim = torch.zeros((bs), dtype=float)
         for j in range(bs):
             avg_sim[j] = torch.mean(similarity[j])
-        _, __ = torch.topk(avg_sim, num_neighbors+1)
-        nbrs[i] = __
+        _, nbrs[i] = torch.topk(avg_sim, num_neighbors)
     return nbrs
