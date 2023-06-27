@@ -266,6 +266,6 @@ def get_neighbors(features):
         avg_sim = torch.zeros((bs), dtype=float)
         for j in range(bs):
             avg_sim[j] = torch.mean(similarity[j])
-        _, __ = torch.topk(avg_sim, num_neighbors+1)
+        _, __ = torch.topk(avg_sim, num_neighbors)
         nbrs[i] = __
     return nbrs
